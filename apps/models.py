@@ -5,9 +5,15 @@ from .validators import validate_apk, validate_icon, validate_cover_graphics, va
 
 class App(models.Model):
     CATEGORY_CHOICES = [
-        ('Health', 'Health'),
-        ('Education', 'Education'),
-        ('Finance', 'Finance'),
+    ('Education', 'Education'),
+    ('Finance', 'Finance'),
+    ('Health', 'Health'),
+    ('Agriculture', 'Agriculture'),
+    ('Trade', 'Trade'),
+    ('Technology', 'Technology'),
+    ('Social Affairs', 'Social Affairs'),
+    ('Justice', 'Justice'),
+    ('Logistics', 'Logistics'),     
     ]
     
     PLATFORM_CHOICES = [('Android', 'Android'),('IOS', 'IOS')]
