@@ -25,95 +25,57 @@ from rest_framework.permissions import IsAuthenticatedOrReadOnly
 from .serializers import ReviewSerializer
 from .models import Review
 from django.db.models import Q
+from django.db import transaction
+from django.core.files.base import ContentFile
 
 class SubmitNewAppView(APIView):
     permission_classes = [IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser,JSONParser]  # To handle file uploads
+    parser_classes = [MultiPartParser, FormParser, JSONParser]  # To handle file uploads
+    
     def post(self, request, *args, **kwargs):
         # Ensure the user is a developer
         if not request.user.is_developer:
             return Response({'detail': 'Access restricted. User is not a developer.'}, status=status.HTTP_403_FORBIDDEN)
 
+        # Get screenshots and read their content immediately to prevent deletion
+        screenshots = request.FILES.getlist('screenshots_upload')
+        screenshot_data = []
+        
+        # Read file content immediately to prevent temp file deletion
+        for screenshot in screenshots:
+            screenshot_data.append({
+                'name': screenshot.name,
+                'content': screenshot.read(),
+                'content_type': screenshot.content_type
+            })
+            # Reset file pointer for potential reuse
+            screenshot.seek(0)
+        
+        # Don't copy request.data when it contains files - just use it directly
         serializer = AppSubmissionSerializer(data=request.data)
         if serializer.is_valid():
-            # Save the app instance
-            app = serializer.save(developer=request.user, status='Pending')
+            # Use database transaction to ensure all operations succeed or fail together
+            try:
+                with transaction.atomic():
+                    # Save the app instance
+                    app = serializer.save(developer=request.user, status='Pending')
 
-            # Handle uploaded screenshots
-            screenshots = request.FILES.getlist('screenshots_upload')
-            for screenshot in screenshots:
-                Screenshot.objects.create(app=app, screenshot=screenshot)
+                    # Handle uploaded screenshots using the stored content
+                    for data in screenshot_data:
+                        # Create a new file object from the stored content
+                        file_obj = ContentFile(data['content'], name=data['name'])
+                        Screenshot.objects.create(app=app, screenshot=file_obj)
 
-            # Include screenshots in the response
-            response_data = AppSubmissionSerializer(app).data
-            return Response(response_data, status=status.HTTP_201_CREATED)
+                # Include screenshots in the response (outside transaction)
+                response_data = AppSubmissionSerializer(app).data
+                return Response(response_data, status=status.HTTP_201_CREATED)
+                
+            except Exception as e:
+                return Response({
+                    'detail': f'Error saving app data: {str(e)}'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    # def post(self, request, *args, **kwargs):
-    #     # Ensure the user is a developer
-    #     if not request.user.is_developer:
-    #         return Response({'detail': 'Access restricted. User is not a developer.'}, status=status.HTTP_403_FORBIDDEN)
-
-    #     serializer = AppSubmissionSerializer(data=request.data)
-    #     if serializer.is_valid():
-    #         # Save the app instance
-    #         app = serializer.save(developer=request.user, status='Pending')
-
-    #         screenshots = request.FILES.getlist('screenshots_upload')
-    #         for screenshot in screenshots:
-    #             Screenshot.objects.create(app=app, screenshot=screenshot)
-
-    #         # Include screenshots in the response
-    #         response_data = AppSubmissionSerializer(app).data
-    #         return Response(response_data, status=status.HTTP_201_CREATED)
-
-    #     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    # def put(self, request, *args, **kwargs):
-    #     app_id = kwargs.get('id')
-    #     app = App.objects.filter(id=app_id, developer=request.user).first()
-
-    #     if not app:
-    #         return Response({'detail': 'App not found or access denied.'}, status=status.HTTP_404_NOT_FOUND)
-
-    #     serializer = AppSubmissionSerializer(app, data=request.data, partial=True)
-    #     if serializer.is_valid():
-    #         app.status = "In Progress"
-    #         app = serializer.save()
-
-    #         # Handle screenshots if provided (not needed for JSON)
-    #         if 'screenshots_upload' in request.FILES:
-    #             # Delete existing screenshots
-    #             Screenshot.objects.filter(app=app).delete()
-    #             # Save new screenshots
-    #             screenshots = request.FILES.getlist('screenshots_upload')
-    #             for screenshot in screenshots:
-    #                 Screenshot.objects.create(app=app, screenshot=screenshot)
-
-    #         return Response(AppSubmissionSerializer(app).data, status=status.HTTP_200_OK)
-
-    #     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-
-
-
-# class SubmitNewAppView(APIView):
-#     permission_classes = [IsAuthenticated]
-
-#     def post(self, request, *args, **kwargs):
-#         # Ensure the user is a developer
-#         if not request.user.is_developer:
-#             return Response({'detail': 'Access restricted. User is not a developer.'}, status=status.HTTP_403_FORBIDDEN)
-
-#         serializer = AppSubmissionSerializer(data=request.data)
-#         if serializer.is_valid():
-#             app = serializer.save(developer=request.user, status='Pending')
-#             return Response(serializer.data, status=status.HTTP_201_CREATED)
-#         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    
 
 class DeveloperAppsView(APIView):
     permission_classes = [IsAuthenticated]
