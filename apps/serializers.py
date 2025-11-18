@@ -3,7 +3,7 @@ from .models import App,Screenshot
 
 
 from rest_framework import serializers
-from .models import App, Screenshot, Review
+from .models import App, Screenshot, Review, FAQ
 
 # Screenshot Serializer
 class ScreenshotSerializer(serializers.ModelSerializer):
@@ -18,6 +18,11 @@ class ReviewSerializer(serializers.ModelSerializer):
     class Meta:
         model = Review
         fields = ['id', 'rating', 'comment', 'user', 'created_at']
+
+class FAQSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FAQ 
+        fields = ['id','user_id', 'category', 'question', 'answer', ]
 
 # App Serializer
 class AppSerializer(serializers.ModelSerializer):

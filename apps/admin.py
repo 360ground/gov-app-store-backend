@@ -8,7 +8,7 @@
 #     search_fields = ('app_name', 'developer__username', 'tags')
 
 from django.contrib import admin
-from .models import App, Screenshot,Review
+from .models import App, Screenshot,Review, FAQ
 from django.core.mail import send_mail
 
 
@@ -20,6 +20,13 @@ class ReviewInline(admin.TabularInline):
     extra = 1
     fields = ['user', 'rating', 'comment', 'created_at']
     readonly_fields = ['created_at']
+
+@admin.register(FAQ)
+class FAQAdmin(admin.ModelAdmin):
+    list_display = ('question', 'category')
+    list_filter = ('category',)
+    search_fields = ('question', 'answer')
+
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags

@@ -63,6 +63,26 @@ class Screenshot(models.Model):
     def __str__(self):
         return f"{self.app.app_name} - Screenshot {self.id}"
     
+
+class FAQ(models.Model):
+    CATEGORY_CHOICES = [
+        ('Platform', 'Platform'),
+        ('Citizen', 'Citizen'),
+        ('Developer', 'Developer'),
+    ]
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES)
+    question = models.TextField()
+    answer = models.TextField()
+    # is_active = models.BooleanField(default=True, help_text="Uncheck this to hide the FAQ without deleting it.")
+    # display_order = models.PositiveIntegerField(default=0, help_text="FAQS with a lower number will appear first.")
+
+    class Meta:
+        ordering = ['category', 'question']
+    
+    def __str__(self):
+        return self.question 
+    
 class Review(models.Model):
     RATING_CHOICES = [
         (1, '1 Star'),

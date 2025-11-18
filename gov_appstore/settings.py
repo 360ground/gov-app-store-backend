@@ -154,6 +154,7 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
 }
 
+ADMIN_EMAIL = "natnaela@360ground.com"
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'  # Use your email provider's SMTP server
@@ -206,26 +207,33 @@ CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
 
+SMS_API_URL = 'http://172.31.102.19:8000/sendsms'
+SMS_API_KEY = 'w1eCTSLJLRNe5385'
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DB_NAME'),
-        'USER': config('DB_USER'),
-        'PASSWORD': config('DB_PASSWORD'),
-        'HOST': config('DB_HOST', default='localhost'),
-        'PORT': config('DB_PORT', default='5432'),
-        # 'OPTIONS': {
-        #     'target_session_attrs': 'read-write',  # Ensure you're connecting to the primary
-        #     'application_name': 'esx',
-        # }
-    },
-    # 'replica': {
-    #     'ENGINE': 'django.db.backends.postgresql',
-    #     'NAME': config('DB_NAME'),
-    #     'USER': config('DB_USER'),
-    #     'PASSWORD': config('DB_PASSWORD'),
-    #     'HOST': 'replica_db_host',
-    #     'PORT': '5432',
-    # }
-}
+
+
+
+
+
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': config('DB_NAME'),
+#         'USER': config('DB_USER'),
+#         'PASSWORD': config('DB_PASSWORD'),
+#         'HOST': config('DB_HOST', default='localhost'),
+#         'PORT': config('DB_PORT', default='5432'),
+#         # 'OPTIONS': {
+#         #     'target_session_attrs': 'read-write',  # Ensure you're connecting to the primary
+#         #     'application_name': 'esx',
+#         # }
+#     },
+#     # 'replica': {
+#     #     'ENGINE': 'django.db.backends.postgresql',
+#     #     'NAME': config('DB_NAME'),
+#     #     'USER': config('DB_USER'),
+#     #     'PASSWORD': config('DB_PASSWORD'),
+#     #     'HOST': 'replica_db_host',
+#     #     'PORT': '5432',
+#     # }
+# }
