@@ -1,0 +1,3 @@
+# Ignore Django migration files
+*/migrations/*.py
+!*/migrations/__init__.py
