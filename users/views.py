@@ -25,6 +25,7 @@ from django.utils import timezone
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated
 from .utils import send_developer_status_email
+import requests
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -52,26 +53,41 @@ logger = logging.getLogger(__name__)
 
 class DeveloperRegistration(APIView):
     def post(self, request, *args, **kwargs):
+        # The email is the key to finding the user from the OTP step.
         email = request.data.get('email')
         password = request.data.get('password')
+        # Get the new username from the request data
         username = request.data.get('username')
 
-        # Validate password length and strength
-        if len(password) < 6:
-            return Response({'detail': 'Password must be at least 6 characters long.'}, status=status.HTTP_400_BAD_REQUEST)
-        if password.isdigit() or password.isalpha():
-            return Response({'detail': 'Password must contain both letters and numbers.'}, status=status.HTTP_400_BAD_REQUEST)
+        # --- VALIDATION ---
+        if not all([email, password, username]):
+            return Response({'detail': 'Email, username, and password are required.'}, status=status.HTTP_400_BAD_REQUEST)
         
-        # existing_users = User.objects.filter(email=email)
-        # if existing_users.exists():
-        #     return Response({'detail': 'Email is already registered.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not request.data.get('organization_name'):
+             return Response({'detail': 'Organization name is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Create user
-        user = User(username=username, email=email)
-        user.set_password(password)  # Set the password explicitly
+        # Check if the desired username is already taken by a *different* user.
+        if User.objects.filter(username=username).exclude(email=email).exists():
+            return Response({'detail': 'This username is already taken.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # --- LOGIC ---
+        try:
+            # Step 1: Find the user that was created during the OTP step.
+            user = User.objects.get(email=email)
+            
+            if Developer.objects.filter(user=user).exists():
+                return Response({'detail': 'This user is already registered as a developer.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        except User.DoesNotExist:
+            return Response({'detail': 'User not found. Please complete the initial registration step first.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Step 2: Update the existing user with the final username and password.
+        user.username = username  # <-- SET THE FINAL USERNAME
+        user.set_password(password)
         user.is_developer = True
         user.save()
-        # Create developer profile
+
+        # Step 3: Create the associated Developer profile with the remaining data.
         developer_data = {
             'user': user,
             'organization_name': request.data.get('organization_name'),
@@ -86,11 +102,8 @@ class DeveloperRegistration(APIView):
         }
 
         developer = Developer.objects.create(**developer_data)
-
-        # Send pending status email
         send_developer_status_email(developer)
 
-        # Serialize and return response
         serializer = DeveloperRegistrationSerializer(developer)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     
@@ -225,31 +238,33 @@ logger = logging.getLogger(__name__)
 def send_otp(request):
     if request.method == "POST":
         try:
-            # Log the raw request body for debugging
-            raw_body = request.body.decode('utf-8')
-            logger.info(f"Raw request body: {raw_body}")
-
-            data = json.loads(raw_body)
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON decoding error: {e}")
-            return JsonResponse({"error": "Invalid JSON body."}, status=400)
+            data = json.loads(request.body.decode('utf-8'))
+        except json.JSONDecodeError:
+            logger.error("Invalid JSON body received in send_otp request.")
+            return JsonResponse({"error": "Invalid JSON format."}, status=400)
 
         email = data.get("email")
 
+        # Validation: Only the email is needed now.
         if not email:
             return JsonResponse({"error": "Email is required."}, status=400)
 
         otp = generate_otp()
         logger.info(f"Generated OTP: {otp} for email: {email}")
-        success = send_email_otp(email, otp)
+        
+        # This call is now correct because send_email_otp expects an email
+        success = send_email_otp(email, otp) 
 
         if success:
             user, created = User.objects.get_or_create(email=email, defaults={"username": email})
             user.email_otp = otp
             user.otp_created_at = timezone.now()
             user.save()
-            logger.info(f"Saved OTP: {otp} for user: {email}")
+            
+            logger.info(f"Saved OTP: {otp} for user identified by email: {email}")
+            # Change the message back to email
             return JsonResponse({"message": "OTP sent to your email."}, status=200)
+        
         return JsonResponse({"error": "Failed to send OTP."}, status=500)
 
     return JsonResponse({"error": "Invalid request method."}, status=405)
@@ -261,11 +276,17 @@ def generate_otp():
     return otp
 
 def send_email_otp(email, otp):
+    """
+    Sends an OTP to the user's email address.
+    """
     subject = 'Your OTP Code'
     message = f'Your OTP code is {otp}.'
     recipient_list = [email]
+    
     try:
+        # This uses the EMAIL_* settings from your settings.py file
         send_mail(subject, message, settings.EMAIL_HOST_USER, recipient_list, fail_silently=False)
+        logger.info(f"Successfully sent email OTP to {email}")
         return True
     except Exception as e:
         logger.error(f"Error sending email: {e}")
@@ -376,11 +397,13 @@ def home(request):
 class ForgotPasswordView(APIView):
     def post(self, request, *args, **kwargs):
         email = request.data.get('email')
-        if not email:
-            return Response({'detail': 'Email is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        is_developer = request.data.get('is_developer')
+        
+        if not email or is_developer is None :
+            return Response({'detail': 'Email and is_developer are required.'}, status=status.HTTP_400_BAD_REQUEST) 
 
         try:
-            user = User.objects.get(email=email)
+            user = User.objects.get(email=email, is_developer=is_developer)
             otp = generate_otp()
             user.email_otp = otp
             user.otp_created_at = timezone.now()
@@ -403,12 +426,15 @@ class VerifyResetOTPView(APIView):
     def post(self, request, *args, **kwargs):
         email = request.data.get('email')
         otp = request.data.get('otp')
+        is_developer = request.data.get('is_developer')
+        
         
         if not email or not otp:
             return Response({'detail': 'Email and OTP are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            user = User.objects.get(email=email)
+            user = User.objects.get(email=email, is_developer=is_developer)
+            
             
             # Check if OTP matches and is not expired (3 minutes validity)
             if user.email_otp != otp:
@@ -433,12 +459,13 @@ class ResetPasswordView(APIView):
     def post(self, request, *args, **kwargs):
         email = request.data.get('email')
         new_password = request.data.get('new_password')
+        is_developer = request.data.get('is_developer')
         
         if not email or not new_password:
             return Response({'detail': 'Email and new password are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            user = User.objects.get(email=email)
+            user = User.objects.get(email=email, is_developer=is_developer)
             
             # Validate password
             if len(new_password) < 6:

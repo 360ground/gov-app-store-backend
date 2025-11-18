@@ -12,6 +12,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse
 import logging
 from rest_framework.views import APIView
+from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 from rest_framework import status
 from .models import App,Screenshot
@@ -21,9 +22,9 @@ from rest_framework.parsers import MultiPartParser, FormParser,JSONParser
 from rest_framework.generics import RetrieveAPIView
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
-from rest_framework.permissions import IsAuthenticatedOrReadOnly
-from .serializers import ReviewSerializer
-from .models import Review
+from rest_framework.permissions import IsAuthenticatedOrReadOnly, AllowAny
+from .serializers import ReviewSerializer, FAQSerializer
+from .models import Review, FAQ
 from django.db.models import Q
 from django.db import transaction
 from django.core.files.base import ContentFile
@@ -59,6 +60,17 @@ class SubmitNewAppView(APIView):
                 with transaction.atomic():
                     # Save the app instance
                     app = serializer.save(developer=request.user, status='Pending')
+
+                    from django.core.mail import send_mail
+                    from django.conf import settings
+
+                    send_mail(
+                        subject="New App Submission",
+                        message=f"A new app named '{app.app_name}' has been submitted by {request.user.username}.",
+                        from_email=settings.EMAIL_HOST_USER,
+                        recipient_list=[settings.ADMIN_EMAIL],
+                        fail_silently=True,
+                    )
 
                     # Handle uploaded screenshots using the stored content
                     for data in screenshot_data:
@@ -188,6 +200,14 @@ class AppReviewView(APIView):
             serializer.save(user=request.user, app=app)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class FAQListView(ListAPIView):
+    permission_classes = [AllowAny]
+    serializer_class = FAQSerializer
+
+    def get_queryset(self):
+        return FAQ.objects.order_by('category')
 
 
 class AppSearchView(APIView):
